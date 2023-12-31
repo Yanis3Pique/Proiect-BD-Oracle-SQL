@@ -1,0 +1,197 @@
+-- EX 12
+-- 1)
+-- Sa se selecteze numele si id-ul echipei, prenumele si numele jucatorilor ai acelor jucatori care au jucat intr-un meci arbitrat de
+-- arbitrul 'Antonio Miguel Mateu Lahoz' si au inaltimea mai mare decat inaltimea medie a echipei lor si au greutatea mai mare de 60 kg.
+WITH MEDII AS (
+  SELECT AVG(INALTIME) AS MEDIE_JUCATORI, ID_ECHIPA
+  FROM JUCATOR
+  GROUP BY ID_ECHIPA
+)
+SELECT DISTINCT E.NUME_ECHIPA, E.ID_ECHIPA, CONCAT(CONCAT(J.PRENUME_JUCATOR, ' '), J.NUME_JUCATOR) AS NUME,
+                NVL(J.INALTIME, 175), DECODE(J.GREUTATE, NULL, 80, J.GREUTATE)
+FROM JUCATOR J
+JOIN ECHIPA E ON J.ID_ECHIPA = E.ID_ECHIPA
+JOIN REZULTAT R ON E.ID_ECHIPA = R.ID_ECHIPA1 OR E.ID_ECHIPA = R.ID_ECHIPA2
+JOIN MECI M ON R.ID_MECI = M.ID_MECI
+WHERE J.INALTIME > (SELECT MEDIE_JUCATORI FROM MEDII WHERE MEDII.ID_ECHIPA = J.ID_ECHIPA)
+    AND M.ARBITRU_ID = (SELECT ID_ARBITRU FROM ARBITRU WHERE UPPER(NUME) = 'ANTONIO MIGUEL MATEU LAHOZ')
+        AND J.GREUTATE > 60
+ORDER BY E.NUME_ECHIPA;
+
+-- 2)
+-- Să se afișeze numele echipelor și informații despre jucători pentru echipele din Spania care au jucători născuți între
+-- anii 1980 și 2000, sau pentru echipele care nu sunt din Spania și au jucători care joacă pe poziția de atacant și
+-- au o înălțime sub 190 cm. Pentru jucătorii care îndeplinesc condițiile,
+-- se va afișa numele lor complet (concatenarea prenumelui și numelui) în cazul în care sunt din Spania și
+-- s-au născut între anii 1980 și 2000, sau înălțimea lor în cazul în care sunt atacanți din alte țări.
+SELECT ECHIPA.NUME_ECHIPA,
+CASE
+    WHEN UPPER(ECHIPA.TARA) = 'SPANIA' AND JUCATOR.DATA_NASTERII BETWEEN TO_DATE('1980-01-01', 'YYYY-MM-DD') AND TO_DATE('2000-12-31', 'YYYY-MM-DD') THEN CONCAT(CONCAT(JUCATOR.PRENUME_JUCATOR, ' '), JUCATOR.NUME_JUCATOR)
+    WHEN UPPER(ECHIPA.TARA) != 'SPANIA' AND UPPER(JUCATOR.POZITIE) = 'ATACANT' THEN TO_CHAR(JUCATOR.INALTIME)
+    ELSE 'NU'
+END AS INFORMATIE_JUCATOR
+FROM ECHIPA
+JOIN JUCATOR ON ECHIPA.ID_ECHIPA = JUCATOR.ID_ECHIPA
+WHERE (LOWER(ECHIPA.TARA) = 'spania' AND JUCATOR.DATA_NASTERII BETWEEN TO_DATE('1980-01-01', 'YYYY-MM-DD') AND TO_DATE('2000-12-31', 'YYYY-MM-DD'))
+OR (LOWER(ECHIPA.TARA) != 'spania' AND LOWER(JUCATOR.POZITIE) = 'atacant' AND JUCATOR.INALTIME < 190)
+ORDER BY ECHIPA.NUME_ECHIPA;
+
+-- 3)
+-- Sa se afiseze numele si prenumele tuturor jucatorilor precum si: anul in care s-au nascut jucatorii cu greutatea > 81,
+-- respectiv aproximativ cate luni au trecut din momentul in care s-au nascut acestia si pana prezent, pentru ceilalti jucatori.
+SELECT JUCATOR.PRENUME_JUCATOR || ' ' || JUCATOR.NUME_JUCATOR AS NUME,
+    CASE
+        WHEN GREUTATE > 81 THEN EXTRACT(YEAR FROM DATA_NASTERII)
+    END AS AN_NASTERE_GREUTATE_MARE,
+    CASE
+        WHEN GREUTATE <= 81 THEN ROUND(MONTHS_BETWEEN(SYSDATE, DATA_NASTERII))
+    END AS NR_LUNI_DE_LA_NASTERE
+FROM JUCATOR
+ORDER BY NUME;
+
+-- 4)
+-- Să se afișeze numele complet, țara și poziția jucătorilor din
+-- echipele cu mai mult de 55 de puncte, ordonate alfabetic după țară.
+SELECT G.PRENUME_JUCATOR || ' ' || G.NUME_JUCATOR AS NUME, G.TARA, G.POZITIE
+FROM ( SELECT JUCATOR.NUME_JUCATOR, JUCATOR.PRENUME_JUCATOR, JUCATOR.TARA, JUCATOR.POZITIE
+       FROM JUCATOR
+       WHERE JUCATOR.ID_ECHIPA IN (
+                SELECT ECHIPA.ID_ECHIPA
+                FROM ECHIPA
+                WHERE ECHIPA.PUNCTE > 55
+           )
+    ) G
+ORDER BY G.TARA;
+
+-- 5)
+-- Să se afișeze pentru fiecare campionat numele echipei cu cele mai multe puncte și numele antrenorului acesteia.
+SELECT C.NUME, E.NUME_ECHIPA, A.PRENUME_ANTRENOR || ' ' || A.NUME_ANTRENOR AS ANTRENOR
+FROM CAMPIONAT C
+JOIN ECHIPA E ON E.ID_CAMPIONAT = C.ID_CAMPIONAT
+JOIN ANTRENOR A ON E.ID_ECHIPA = A.ID_ECHIPA
+WHERE E.PUNCTE = (
+  SELECT MAX(PUNCTE)
+  FROM ECHIPA E2
+  WHERE E2.ID_CAMPIONAT = C.ID_CAMPIONAT
+)
+GROUP BY C.NUME, E.NUME_ECHIPA, A.PRENUME_ANTRENOR, A.NUME_ANTRENOR;
+
+
+
+-- EX 13
+-- 1) 
+-- Modificarea numelui, prenumelui și țării antrenorului care manageriază echipa/echipele care joacă pe stadionul “Signal Iduna Park”.
+COMMIT;
+
+UPDATE ANTRENOR
+SET PRENUME_ANTRENOR = 'Lionel', NUME_ANTRENOR = 'Scaloni', TARA = 'Argentina'
+WHERE ID_ECHIPA = (
+    SELECT ID_ECHIPA
+    FROM ECHIPA
+    JOIN STADION ON ECHIPA.ID_STADION = STADION.ID_STADION
+    WHERE UPPER(STADION.NUME) = 'SIGNAL IDUNA PARK'
+);
+
+SELECT * FROM ANTRENOR;
+ROLLBACK;
+
+-- 2)
+-- Ștergerea antrenorilor născuți înainte de 1970.
+COMMIT;
+
+DELETE FROM ANTRENOR
+WHERE DATA_NASTERII < TO_DATE('01-JAN-1970', 'DD-MON-YYYY');
+
+SELECT * FROM ANTRENOR;
+ROLLBACK;
+
+-- 3)
+-- Să se adauge 3 puncte pentru fiecare echipă gazdă care a câștigat meciuri înainte de 1 ianuarie 2023.
+COMMIT;
+
+UPDATE ECHIPA
+SET PUNCTE = PUNCTE + 3 * (
+SELECT COUNT(*)
+FROM MECI M
+JOIN REZULTAT R ON M.ID_MECI = R.ID_MECI
+WHERE M.DATA_MECIULUI < TO_DATE('01-JAN-2023', 'DD-MON-YYYY')
+AND ((R.ID_ECHIPA1 = ECHIPA.ID_ECHIPA AND M.SCOR_ECHIPA1 > M.SCOR_ECHIPA2)
+OR (R.ID_ECHIPA2 = ECHIPA.ID_ECHIPA AND M.SCOR_ECHIPA2 > M.SCOR_ECHIPA1))
+)
+WHERE EXISTS (
+SELECT 1
+FROM MECI M
+JOIN REZULTAT R ON M.ID_MECI = R.ID_MECI
+WHERE M.DATA_MECIULUI < TO_DATE('01-JAN-2023', 'DD-MON-YYYY')
+AND ((R.ID_ECHIPA1 = ECHIPA.ID_ECHIPA AND M.SCOR_ECHIPA1 > M.SCOR_ECHIPA2)
+OR (R.ID_ECHIPA2 = ECHIPA.ID_ECHIPA AND M.SCOR_ECHIPA2 > M.SCOR_ECHIPA1))
+);
+
+SELECT * FROM ECHIPA;
+ROLLBACK;
+
+
+
+-- EX 14
+-- VIZUALIZARE COMPLEXA
+-- Vizualizarea preia numele echipei, numărul de jucători și înălțimea medie a juctorilor unei echipe.
+CREATE VIEW VIZUALIZARE_COMPLEXA AS
+SELECT E.NUME_ECHIPA, COUNT(J.ID_JUCATOR) AS NUMAR_JUCATORI, AVG(J.INALTIME) AS INALTIME_MEDIE
+FROM ECHIPA E
+JOIN JUCATOR J ON E.ID_ECHIPA = J.ID_ECHIPA
+GROUP BY E.NUME_ECHIPA;
+
+-- ALLOWED LMD OPERATION
+SELECT *
+FROM VIZUALIZARE_COMPLEXA
+WHERE NUMAR_JUCATORI > 0 AND INALTIME_MEDIE IS NOT NULL;
+
+-- NOT ALLOWED LMD OPERATION
+UPDATE VIZUALIZARE_COMPLEXA
+SET INALTIME_MEDIE = INALTIME_MEDIE + 5;
+
+
+
+-- EX 15
+-- OUTER JOIN
+-- Să se afișeze informații despre echipele de fotbal, jucătorii, antrenorii și stadioanele asociate lor.
+-- Dacă un jucător nu are prenume, se va afișa caracterul '-' în locul prenumelui. Informațiile despre jucători vor fi
+-- concatenate din prenume și nume, informațiile despre antrenori vor fi concatenate din prenume și nume, iar informațiile
+-- despre stadioane vor include numele stadioanelor, capacitatea lor și locația (orașul). Rezultatele vor fi sortate după numele echipei.
+SELECT ECHIPA.NUME_ECHIPA, NVL(JUCATOR.PRENUME_JUCATOR, '-') || ' ' || JUCATOR.NUME_JUCATOR AS INFO_JUCATOR,
+       ANTRENOR.PRENUME_ANTRENOR || ' ' || ANTRENOR.NUME_ANTRENOR AS INFO_ANTRENOR,
+       STADION.NUME || ', capacitatea ' || STADION.CAPACITATE || ' de locuri, locație ' || STADION.ORAS AS INFO_STADION
+FROM ECHIPA
+LEFT OUTER JOIN JUCATOR ON ECHIPA.ID_ECHIPA = JUCATOR.ID_ECHIPA
+LEFT OUTER JOIN ANTRENOR ON ECHIPA.ID_ECHIPA = ANTRENOR.ID_ECHIPA
+LEFT OUTER JOIN STADION ON ECHIPA.ID_STADION = STADION.ID_STADION
+ORDER BY ECHIPA.NUME_ECHIPA;
+
+-- DIVISION
+-- Afișați numele tuturor echipelor care au jucat mai puțin de 2 meciuri.
+SELECT E.NUME_ECHIPA
+FROM ECHIPA E
+WHERE NOT EXISTS (
+  SELECT *
+  FROM REZULTAT R
+  WHERE R.ID_ECHIPA1 = E.ID_ECHIPA OR R.ID_ECHIPA2 = E.ID_ECHIPA
+) OR E.ID_ECHIPA IN (
+  SELECT R.ID_ECHIPA1
+  FROM REZULTAT R
+  GROUP BY R.ID_ECHIPA1
+  HAVING COUNT(DISTINCT R.ID_MECI) < 2
+) OR E.ID_ECHIPA IN (
+  SELECT R.ID_ECHIPA2
+  FROM REZULTAT R
+  GROUP BY R.ID_ECHIPA2
+  HAVING COUNT(DISTINCT R.ID_MECI) < 2);
+
+-- TOP-N
+-- Să se afișeze numele primelor 5 echipe cu cele mai multe puncte.
+SELECT NUME_ECHIPA
+FROM (
+  SELECT *
+  FROM ECHIPA
+  ORDER BY PUNCTE DESC
+)
+WHERE ROWNUM <= 5;
